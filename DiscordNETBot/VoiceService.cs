@@ -1,13 +1,8 @@
 ﻿using Discord;
 using Discord.Audio;
 using Discord.WebSocket;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace DiscordNETBot
 {
@@ -17,7 +12,7 @@ namespace DiscordNETBot
         public ConcurrentDictionary<ulong, GuildMusicState> MusicStates { get; } = new();
         public void RemoveAudioClient(ulong guildId)
         {
-            if (AudioClients.TryRemove(guildId, out var client))
+            if (AudioClients.TryRemove(guildId, out IAudioClient? client))
             {
                 try { client.Dispose(); } catch { /* ignore */ }
             }
@@ -26,17 +21,30 @@ namespace DiscordNETBot
 
         public async Task<IAudioClient> ConnectAsync(IVoiceChannel channel)
         {
-            // Always remove stale client before connecting
             RemoveAudioClient(channel.Guild.Id);
 
-            var audioClient = await channel.ConnectAsync();
-            AudioClients[channel.Guild.Id] = audioClient;
+            try
+            {
+                IAudioClient audioClient = await channel.ConnectAsync();
+                AudioClients[channel.Guild.Id] = audioClient;
+                // Ensure GuildMusicState exists
+                GuildMusicState state = MusicStates.GetOrAdd(channel.Guild.Id, _ => new GuildMusicState());
+                state.AudioClient = audioClient;
+                await Task.Delay(500); // handshake buffer
 
-            // Ensure GuildMusicState exists
-            var state = MusicStates.GetOrAdd(channel.Guild.Id, _ => new GuildMusicState());
-            state.AudioClient = audioClient;
+                audioClient.Disconnected += async ex =>
+                {
+                    Console.WriteLine($"Voice disconnected in guild {channel.Guild.Id}: {ex?.Message}");
+                    RemoveAudioClient(channel.Guild.Id);
+                    await Task.CompletedTask;
+                };
 
-            return audioClient;
+                return audioClient;
+            }
+            catch (System.Net.WebSockets.WebSocketException ex)
+            {
+                return null!;
+            }
         }
     }
 
@@ -50,5 +58,4 @@ namespace DiscordNETBot
     }
 
     public record TrackInfo(string Title, string Url, TimeSpan Duration);
-
 }

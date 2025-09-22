@@ -1,9 +1,9 @@
 ﻿using Discord;
 using Discord.Interactions;
+using Discord.Rest;
 using Discord.WebSocket;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using System;
 
 namespace DiscordNETBot
 {
@@ -15,12 +15,14 @@ namespace DiscordNETBot
         private static readonly string BotToken;
         private static readonly ulong GuildId;
         private static readonly ulong VoiceId;
+        private static readonly IConfiguration _config;
 
         static Program()
         {
-            var config = new ConfigurationBuilder()
+            IConfigurationRoot config = new ConfigurationBuilder()
                 .AddUserSecrets<Program>()
                 .Build();
+            _config = config;
 
             BotToken = config["BotToken"];
             GuildId = ulong.Parse(config["GuildId"]);
@@ -42,6 +44,7 @@ namespace DiscordNETBot
                 .AddSingleton(_client)
                 .AddSingleton(_interactionService)
                 .AddSingleton<VoiceService>()
+                .AddSingleton<IConfiguration>(_config)
                 .BuildServiceProvider();
 
             _client.Log += LogAsync;
@@ -110,7 +113,6 @@ namespace DiscordNETBot
             return Task.CompletedTask;
         }
 
-
         private Task LogAsync(LogMessage log)
         {
             Console.WriteLine(log.ToString());
@@ -119,29 +121,25 @@ namespace DiscordNETBot
 
         private async Task ReadyAsync()
         {
-            var commands = await _interactionService.RegisterCommandsToGuildAsync(GuildId);
-
-            //var guild = _client.GetGuild(GuildId);
-            //var voiceChannel = guild?.GetVoiceChannel(VoiceId);
-
-            //if (voiceChannel != null)
-            //{
-            //    await voiceChannel.ConnectAsync();
-            //    Console.WriteLine($"Auto-joined {voiceChannel.Name}");
-            //}
-            //else
-            //{
-            //    Console.WriteLine("Voice channel not found.");
-            //}
+            IReadOnlyCollection<RestGuildCommand> commands = await _interactionService.RegisterCommandsToGuildAsync(GuildId);
 
             Console.WriteLine("Bot is ready!");
+
+            foreach (var guild in _client.Guilds)
+            {
+                var botUser = guild.GetUser(_client.CurrentUser.Id);
+                if (botUser?.VoiceChannel != null)
+                {
+                    Console.WriteLine($"[Voice] Bot was already in voice channel '{botUser.VoiceChannel.Name}' in guild '{guild.Name}', leaving...");
+                }
+            }
         }
 
         private async Task HandleInteraction(SocketInteraction interaction)
         {
             try
             {
-                var ctx = new SocketInteractionContext(_client, interaction);
+                SocketInteractionContext ctx = new SocketInteractionContext(_client, interaction);
                 await _interactionService.ExecuteCommandAsync(ctx, _services);
             }
             catch (Exception ex)
@@ -149,7 +147,7 @@ namespace DiscordNETBot
                 Console.WriteLine(ex);
                 if (interaction.Type == InteractionType.ApplicationCommand)
                 {
-                    var originalResponse = await interaction.GetOriginalResponseAsync();
+                    RestInteractionMessage originalResponse = await interaction.GetOriginalResponseAsync();
                     await originalResponse.DeleteAsync();
                 }
             }

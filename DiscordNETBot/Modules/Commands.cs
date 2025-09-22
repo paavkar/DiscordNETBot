@@ -1,33 +1,33 @@
 ﻿using Discord;
 using Discord.Audio;
 using Discord.Interactions;
-using Discord.Rest;
 using Discord.WebSocket;
-using System;
-using System.Collections.Concurrent;
+using Microsoft.Extensions.Configuration;
 using System.Diagnostics;
 using YoutubeExplode;
+using YoutubeExplode.Videos;
 using YoutubeExplode.Videos.Streams;
 
 namespace DiscordNETBot.Modules
 {
     public class MyCommands : InteractionModuleBase<SocketInteractionContext>
     {
-        readonly ulong VoiceChannelId = 1419338792543715349; 
+        private readonly ulong VoiceId;
         private readonly VoiceService _voiceService;
         private readonly YoutubeClient _youtube = new();
 
-        public MyCommands(VoiceService voiceService)
+        public MyCommands(VoiceService voiceService, IConfiguration config)
         {
             _voiceService = voiceService;
+            VoiceId = ulong.Parse(config["VoiceId"]);
         }
 
         [SlashCommand("userinfo", "Get information about yourself")]
         public async Task UserInfo()
         {
-            var user = Context.User;
+            SocketUser user = Context.User;
 
-            var embed = new EmbedBuilder()
+            Embed embed = new EmbedBuilder()
                 .WithTitle($"{user.Username}'s Info")
                 .WithThumbnailUrl(user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl())
                 .AddField("Username", user.Username, true)
@@ -53,7 +53,7 @@ namespace DiscordNETBot.Modules
             [Summary(description: "A number parameter")] int number,
             [Summary(description: "Choose an option")] MyChoices choice)
         {
-            var embed = new EmbedBuilder()
+            Embed embed = new EmbedBuilder()
                 .WithTitle("Multi Options Command")
                 .AddField("Text", text)
                 .AddField("Number", number)
@@ -74,7 +74,7 @@ namespace DiscordNETBot.Modules
         [SlashCommand("button-demo", "Show a message with buttons")]
         public async Task ButtonDemo()
         {
-            var builder = new ComponentBuilder()
+            ComponentBuilder builder = new ComponentBuilder()
                 .WithButton("Click Me!", "btn_click", ButtonStyle.Primary)
                 .WithButton("Danger!", "btn_danger", ButtonStyle.Danger);
 
@@ -82,28 +82,14 @@ namespace DiscordNETBot.Modules
         }
 
         // /join [channel]
-        [SlashCommand("join", "Join your current voice channel")]
+        [SlashCommand("join", "Join your current voice channel", runMode: RunMode.Async)]
         public async Task JoinAsync()
         {
-            var user = Context.User as IGuildUser;
-            var channel = user?.VoiceChannel;
+            SocketVoiceChannel channel = Context.Guild.GetVoiceChannel(VoiceId);
 
-            if (channel == null)
-            {
-                await RespondAsync("You need to be in a voice channel first.", ephemeral: true);
-                return;
-            }
-
-            try
-            {
-                await _voiceService.ConnectAsync(channel);
+            var audioClient = await _voiceService.ConnectAsync(channel);
+            if (audioClient is not null)
                 await RespondAsync($"Joined **{channel.Name}** ✅");
-            }
-            catch (Exception ex)
-            {
-                _voiceService.RemoveAudioClient(channel.Guild.Id);
-                await RespondAsync($"Failed to join: `{ex.Message}`", ephemeral: true);
-            }
         }
 
 
@@ -112,7 +98,7 @@ namespace DiscordNETBot.Modules
         {
             var guildId = Context.Guild.Id;
 
-            if (!_voiceService.AudioClients.TryGetValue(guildId, out var client))
+            if (!_voiceService.AudioClients.TryGetValue(guildId, out IAudioClient? client))
             {
                 await RespondAsync("I'm not in a voice channel.", ephemeral: true);
                 return;
@@ -143,24 +129,24 @@ namespace DiscordNETBot.Modules
             string url,
             ISocketMessageChannel channel)
         {
-            var state = _voiceService.MusicStates.GetOrAdd(guild.Id, _ => new GuildMusicState());
+            GuildMusicState state = _voiceService.MusicStates.GetOrAdd(guild.Id, _ => new GuildMusicState());
 
             state.PlaybackChannel = channel;
             // Get video info
-            var video = await _youtube.Videos.GetAsync(url);
-            var duration = video.Duration ?? TimeSpan.Zero;
-            var track = new TrackInfo(video.Title, video.Id.Value, duration);
+            Video video = await _youtube.Videos.GetAsync(url);
+            TimeSpan duration = video.Duration ?? TimeSpan.Zero;
+            TrackInfo track = new TrackInfo(video.Title, video.Id.Value, duration);
+
             await state.Queue.Writer.WriteAsync(track);
             state.DisplayQueue.Add(track);
 
             // Build queue list with durations
-            var queueList = state.DisplayQueue
+            List<string> queueList = state.DisplayQueue
                 .Select((t, i) => $"{i + 1}. {t.Title} [{FormatDuration(t.Duration)}]")
                 .ToList();
+            TimeSpan totalTime = state.DisplayQueue.Aggregate(TimeSpan.Zero, (sum, t) => sum + t.Duration);
 
-            var totalTime = state.DisplayQueue.Aggregate(TimeSpan.Zero, (sum, t) => sum + t.Duration);
-
-            var embed = new EmbedBuilder()
+            Embed embed = new EmbedBuilder()
                 .WithTitle("🎶 Added to Queue")
                 .WithDescription($"**{track.Title}** [{FormatDuration(track.Duration)}] has been added to the queue.")
                 .AddField("Current Queue", queueList.Count > 0 ? string.Join("\n", queueList) : "*(empty)*")
@@ -193,7 +179,7 @@ namespace DiscordNETBot.Modules
             {
                 while (await state.Queue.Reader.WaitToReadAsync())
                 {
-                    while (state.Queue.Reader.TryRead(out var track))
+                    while (state.Queue.Reader.TryRead(out TrackInfo? track))
                     {
                         // Remove from display queue
                         var idx = state.DisplayQueue.FindIndex(t => t.Url == track.Url);
@@ -202,7 +188,7 @@ namespace DiscordNETBot.Modules
 
                         if (state.PlaybackChannel != null)
                         {
-                            var nowPlayingEmbed = new EmbedBuilder()
+                            Embed nowPlayingEmbed = new EmbedBuilder()
                                 .WithTitle("▶️ Now Playing")
                                 .WithDescription($"**{track.Title}**")
                                 .AddField("Duration", FormatDuration(track.Duration), true)
@@ -213,7 +199,6 @@ namespace DiscordNETBot.Modules
 
                             await state.PlaybackChannel.SendMessageAsync(embed: nowPlayingEmbed);
                         }
-
 
                         await PlayTrackAsync(state.AudioClient, track);
                     }
@@ -231,13 +216,13 @@ namespace DiscordNETBot.Modules
 
         private async Task PlayTrackAsync(IAudioClient client, TrackInfo track)
         {
-            var youtube = new YoutubeClient();
-            var manifestTask = youtube.Videos.Streams.GetManifestAsync(track.Url);
-            var manifest = await manifestTask;
+            YoutubeClient youtube = new YoutubeClient();
+            ValueTask<StreamManifest> manifestTask = youtube.Videos.Streams.GetManifestAsync(track.Url);
+            StreamManifest manifest = await manifestTask;
 
-            var audioStreamInfo = manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
+            IStreamInfo audioStreamInfo = manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
             var streamUrl = audioStreamInfo.Url;
-            using var ffmpeg = Process.Start(new ProcessStartInfo
+            using Process? ffmpeg = Process.Start(new ProcessStartInfo
             {
                 FileName = "ffmpeg",
                 Arguments = $"-hide_banner -loglevel panic -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -i \"{streamUrl}\" -ac 2 -f s16le -ar 48000 pipe:1",
@@ -245,8 +230,8 @@ namespace DiscordNETBot.Modules
                 RedirectStandardError = true,
                 UseShellExecute = false
             });
-            using var output = ffmpeg.StandardOutput.BaseStream;
-            using var discord = client.CreatePCMStream(AudioApplication.Music);
+            using Stream output = ffmpeg.StandardOutput.BaseStream;
+            using AudioOutStream discord = client.CreatePCMStream(AudioApplication.Music);
             try
             {
                 await output.CopyToAsync(discord);
@@ -261,11 +246,19 @@ namespace DiscordNETBot.Modules
             }
         }
 
-        [SlashCommand("play", "Play a track from a URL or search query")]
+        [SlashCommand("play", "Play a track from a URL or search query", runMode: RunMode.Async)]
         public async Task PlayAsync(string query)
         {
-            var user = Context.User as IGuildUser;
-            var channel = user?.VoiceChannel;
+            IGuildUser? user = Context.User as IGuildUser;
+            IVoiceChannel? userChannel = user?.VoiceChannel;
+
+            if (userChannel is null)
+            {
+                await RespondAsync("You need to be in a Voice Channel to play music.");
+                return;
+            }
+
+            SocketVoiceChannel channel = Context.Guild.GetVoiceChannel(VoiceId);
 
             if (channel == null)
             {
@@ -277,24 +270,11 @@ namespace DiscordNETBot.Modules
             if (!_voiceService.AudioClients.TryGetValue(channel.Guild.Id, out audioClient) ||
                 audioClient.ConnectionState != ConnectionState.Connected)
             {
-                try
-                {
-                    audioClient = await _voiceService.ConnectAsync(channel);
-                    // Optional: small delay to ensure handshake completes
-                    await Task.Delay(500);
-                }
-                catch (Exception ex)
-                {
-                    _voiceService.RemoveAudioClient(channel.Guild.Id);
-                    await RespondAsync($"Could not connect: `{ex.Message}`", ephemeral: true);
-                    return;
-                }
+                audioClient = await _voiceService.ConnectAsync(channel);
+                await Task.Delay(500); // handshake buffer
             }
 
             // Now enqueue the track
-            var state = _voiceService.MusicStates.GetOrAdd(channel.Guild.Id, _ => new GuildMusicState());
-            state.AudioClient = audioClient;
-
             await EnqueueAsync(Context.Guild, audioClient, query, Context.Channel);
         }
 
@@ -302,13 +282,13 @@ namespace DiscordNETBot.Modules
         [SlashCommand("queue", "Display the current queue")]
         public async Task DisplayQueue()
         {
-            var state = _voiceService.MusicStates.GetOrAdd(Context.Guild.Id, _ => new GuildMusicState());
-            var queueList = state.DisplayQueue
+            GuildMusicState state = _voiceService.MusicStates.GetOrAdd(Context.Guild.Id, _ => new GuildMusicState());
+            List<string> queueList = state.DisplayQueue
                 .Select((t, i) => $"{i + 1}. {t.Title} [{FormatDuration(t.Duration)}]")
                 .ToList();
-            var totalTime = state.DisplayQueue.Aggregate(TimeSpan.Zero, (sum, t) => sum + t.Duration);
+            TimeSpan totalTime = state.DisplayQueue.Aggregate(TimeSpan.Zero, (sum, t) => sum + t.Duration);
 
-            var embed = new EmbedBuilder()
+            Embed embed = new EmbedBuilder()
                 .WithTitle("🎶 Added to Queue")
                 .WithDescription($"The current queue:")
                 .AddField("Current Queue", queueList.Count > 0 ? string.Join("\n", queueList) : "*(empty)*")
