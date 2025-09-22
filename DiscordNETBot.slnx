@@ -1,3 +1,6 @@
 <Solution>
+  <Project Path="DiscordNETBot.Application/DiscordNETBot.Application.csproj" Id="209db8ad-7155-4ec4-8440-0b6f080804cd" />
+  <Project Path="DiscordNETBot.Domain/DiscordNETBot.Domain.csproj" Id="3328c292-2646-4c71-948f-8acccee4af0f" />
+  <Project Path="DiscordNETBot.Infrastructure/DiscordNETBot.Infrastructure.csproj" Id="105cc742-5dff-4bf1-b27b-64da5f44753b" />
   <Project Path="DiscordNETBot/DiscordNETBot.csproj" />
 </Solution>

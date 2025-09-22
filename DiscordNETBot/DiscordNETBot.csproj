@@ -30,4 +30,8 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\DiscordNETBot.Infrastructure\DiscordNETBot.Infrastructure.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -1,15 +1,16 @@
-﻿using Discord;
+using Discord;
 using Discord.Audio;
-using Discord.WebSocket;
+using DiscordNETBot.Application.Voice;
+using DiscordNETBot.Domain.Voice;
 using System.Collections.Concurrent;
-using System.Threading.Channels;
 
-namespace DiscordNETBot
+namespace DiscordNETBot.Infrastructure
 {
-    public class VoiceService
+    public class VoiceService : IVoiceService
     {
-        public ConcurrentDictionary<ulong, IAudioClient> AudioClients { get; } = new();
-        public ConcurrentDictionary<ulong, GuildMusicState> MusicStates { get; } = new();
+        public ConcurrentDictionary<ulong, IAudioClient> AudioClients { get; set; } = new();
+        public ConcurrentDictionary<ulong, GuildMusicState> MusicStates { get; set; } = new();
+
         public void RemoveAudioClient(ulong guildId)
         {
             if (AudioClients.TryRemove(guildId, out IAudioClient? client))
@@ -41,21 +42,10 @@ namespace DiscordNETBot
 
                 return audioClient;
             }
-            catch (System.Net.WebSockets.WebSocketException ex)
+            catch (System.Net.WebSockets.WebSocketException)
             {
                 return null!;
             }
         }
     }
-
-    public class GuildMusicState
-    {
-        public IAudioClient AudioClient { get; set; }
-        public Channel<TrackInfo> Queue { get; } = Channel.CreateUnbounded<TrackInfo>();
-        public List<TrackInfo> DisplayQueue { get; } = new();
-        public bool IsPlaying { get; set; } = false;
-        public ISocketMessageChannel PlaybackChannel { get; set; }
-    }
-
-    public record TrackInfo(string Title, string Url, TimeSpan Duration);
 }

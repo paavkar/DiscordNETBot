@@ -2,6 +2,8 @@
 using Discord.Interactions;
 using Discord.Rest;
 using Discord.WebSocket;
+using DiscordNETBot.Application.Voice;
+using DiscordNETBot.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -43,7 +45,7 @@ namespace DiscordNETBot
             _services = new ServiceCollection()
                 .AddSingleton(_client)
                 .AddSingleton(_interactionService)
-                .AddSingleton<VoiceService>()
+                .AddSingleton<IVoiceService, VoiceService>()
                 .AddSingleton<IConfiguration>(_config)
                 .BuildServiceProvider();
 
@@ -125,9 +127,9 @@ namespace DiscordNETBot
 
             Console.WriteLine("Bot is ready!");
 
-            foreach (var guild in _client.Guilds)
+            foreach (SocketGuild? guild in _client.Guilds)
             {
-                var botUser = guild.GetUser(_client.CurrentUser.Id);
+                SocketGuildUser botUser = guild.GetUser(_client.CurrentUser.Id);
                 if (botUser?.VoiceChannel != null)
                 {
                     Console.WriteLine($"[Voice] Bot was already in voice channel '{botUser.VoiceChannel.Name}' in guild '{guild.Name}', leaving...");

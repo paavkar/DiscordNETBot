@@ -2,6 +2,8 @@
 using Discord.Audio;
 using Discord.Interactions;
 using Discord.WebSocket;
+using DiscordNETBot.Application.Voice;
+using DiscordNETBot.Domain.Voice;
 using Microsoft.Extensions.Configuration;
 using System.Diagnostics;
 using YoutubeExplode;
@@ -13,12 +15,12 @@ namespace DiscordNETBot.Modules
     public class MyCommands : InteractionModuleBase<SocketInteractionContext>
     {
         private readonly ulong VoiceId;
-        private readonly VoiceService _voiceService;
+        private readonly IVoiceService VoiceService;
         private readonly YoutubeClient _youtube = new();
 
-        public MyCommands(VoiceService voiceService, IConfiguration config)
+        public MyCommands(IVoiceService voiceService, IConfiguration config)
         {
-            _voiceService = voiceService;
+            VoiceService = voiceService;
             VoiceId = ulong.Parse(config["VoiceId"]);
         }
 
@@ -87,7 +89,7 @@ namespace DiscordNETBot.Modules
         {
             SocketVoiceChannel channel = Context.Guild.GetVoiceChannel(VoiceId);
 
-            var audioClient = await _voiceService.ConnectAsync(channel);
+            IAudioClient? audioClient = await VoiceService.ConnectAsync(channel);
             if (audioClient is not null)
                 await RespondAsync($"Joined **{channel.Name}** ✅");
         }
@@ -98,7 +100,7 @@ namespace DiscordNETBot.Modules
         {
             var guildId = Context.Guild.Id;
 
-            if (!_voiceService.AudioClients.TryGetValue(guildId, out IAudioClient? client))
+            if (!VoiceService.AudioClients.TryGetValue(guildId, out IAudioClient? client))
             {
                 await RespondAsync("I'm not in a voice channel.", ephemeral: true);
                 return;
@@ -117,7 +119,7 @@ namespace DiscordNETBot.Modules
             finally
             {
                 // Always remove from service to prevent stale/disposed client reuse
-                _voiceService.RemoveAudioClient(guildId);
+                VoiceService.RemoveAudioClient(guildId);
             }
 
             await RespondAsync("Left the voice channel 👋");
@@ -129,7 +131,7 @@ namespace DiscordNETBot.Modules
             string url,
             ISocketMessageChannel channel)
         {
-            GuildMusicState state = _voiceService.MusicStates.GetOrAdd(guild.Id, _ => new GuildMusicState());
+            GuildMusicState state = VoiceService.MusicStates.GetOrAdd(guild.Id, _ => new GuildMusicState());
 
             state.PlaybackChannel = channel;
             // Get video info
@@ -267,10 +269,10 @@ namespace DiscordNETBot.Modules
             }
 
             IAudioClient audioClient;
-            if (!_voiceService.AudioClients.TryGetValue(channel.Guild.Id, out audioClient) ||
+            if (!VoiceService.AudioClients.TryGetValue(channel.Guild.Id, out audioClient) ||
                 audioClient.ConnectionState != ConnectionState.Connected)
             {
-                audioClient = await _voiceService.ConnectAsync(channel);
+                audioClient = await VoiceService.ConnectAsync(channel);
                 await Task.Delay(500); // handshake buffer
             }
 
@@ -282,7 +284,7 @@ namespace DiscordNETBot.Modules
         [SlashCommand("queue", "Display the current queue")]
         public async Task DisplayQueue()
         {
-            GuildMusicState state = _voiceService.MusicStates.GetOrAdd(Context.Guild.Id, _ => new GuildMusicState());
+            GuildMusicState state = VoiceService.MusicStates.GetOrAdd(Context.Guild.Id, _ => new GuildMusicState());
             List<string> queueList = state.DisplayQueue
                 .Select((t, i) => $"{i + 1}. {t.Title} [{FormatDuration(t.Duration)}]")
                 .ToList();
