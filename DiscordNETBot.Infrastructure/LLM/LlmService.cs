@@ -16,6 +16,10 @@ namespace DiscordNETBot.Infrastructure.LLM
             MaxTokens = 300,
             Temperature = 0.7
         };
+        private string SystemPrompt = """
+            You are a helpful assistant. Here are your rules you need to adhere to:
+            1. Keep your responses concise and to the point (under 300 tokens).
+            """;
         public LlmService(IConfiguration config)
         {
             var modelId = config["Ollama:ModelId"];
@@ -36,6 +40,7 @@ namespace DiscordNETBot.Infrastructure.LLM
             if (!ConversationHistories.TryGetValue(key, out ChatHistory? history))
             {
                 history = [];
+                history.AddDeveloperMessage(SystemPrompt);
                 ConversationHistories[key] = history;
             }
 
@@ -50,6 +55,7 @@ namespace DiscordNETBot.Infrastructure.LLM
         public async Task<string> GetResponseAsync(string message)
         {
             ChatHistory history = [];
+            history.AddDeveloperMessage(SystemPrompt);
             history.AddUserMessage(message);
 
             ChatMessageContent response = await ChatCompletionService.GetChatMessageContentAsync(
