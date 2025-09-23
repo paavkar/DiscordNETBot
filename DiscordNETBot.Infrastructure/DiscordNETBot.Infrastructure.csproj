@@ -7,10 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Discord.Net" Version="3.18.0-nightly.20250921.631" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\DiscordNETBot.Application\DiscordNETBot.Application.csproj" />
   </ItemGroup>
 
