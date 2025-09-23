@@ -2,6 +2,7 @@
 using Discord.Audio;
 using Discord.Interactions;
 using Discord.WebSocket;
+using DiscordNETBot.Application.LLM;
 using DiscordNETBot.Application.Voice;
 using DiscordNETBot.Domain.Voice;
 using Microsoft.Extensions.Configuration;
@@ -17,11 +18,13 @@ namespace DiscordNETBot.Modules
         private readonly ulong VoiceId;
         private readonly IVoiceService VoiceService;
         private readonly YoutubeClient _youtube = new();
+        private readonly ILlmService LlmService;
 
-        public MyCommands(IVoiceService voiceService, IConfiguration config)
+        public MyCommands(IVoiceService voiceService, IConfiguration config, ILlmService llmService)
         {
             VoiceService = voiceService;
             VoiceId = ulong.Parse(config["VoiceId"]);
+            LlmService = llmService;
         }
 
         [SlashCommand("userinfo", "Get information about yourself")]
@@ -280,7 +283,6 @@ namespace DiscordNETBot.Modules
             await EnqueueAsync(Context.Guild, audioClient, query, Context.Channel);
         }
 
-
         [SlashCommand("queue", "Display the current queue")]
         public async Task DisplayQueue()
         {
@@ -300,6 +302,22 @@ namespace DiscordNETBot.Modules
                 .Build();
 
             await RespondAsync(embed: embed);
+        }
+
+        [SlashCommand("ask", "Ask the AI a question", runMode: RunMode.Async)]
+        public async Task AskAsync([Summary(description: "Your question")] string question)
+        {
+            await DeferAsync(); // Acknowledge the command to avoid timeout
+            var response = await LlmService.GetResponseAsync(question);
+            await FollowupAsync($"{Context.User.Mention} {response}");
+        }
+
+        [SlashCommand("chat", "Chat with the AI", runMode: RunMode.Async)]
+        public async Task ChatAsync([Summary(description: "Your message")] string message)
+        {
+            await DeferAsync(); // Acknowledge the command to avoid timeout
+            var response = await LlmService.GetChatResponseAsync(Context.Guild.Id, Context.User.Id, message);
+            await FollowupAsync($"{Context.User.Mention} {response}");
         }
     }
 }

@@ -2,8 +2,10 @@
 using Discord.Interactions;
 using Discord.Rest;
 using Discord.WebSocket;
+using DiscordNETBot.Application.LLM;
 using DiscordNETBot.Application.Voice;
 using DiscordNETBot.Infrastructure;
+using DiscordNETBot.Infrastructure.LLM;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -43,10 +45,11 @@ namespace DiscordNETBot
             _interactionService = new InteractionService(_client.Rest);
 
             _services = new ServiceCollection()
+                .AddSingleton<IConfiguration>(_config)
                 .AddSingleton(_client)
                 .AddSingleton(_interactionService)
                 .AddSingleton<IVoiceService, VoiceService>()
-                .AddSingleton<IConfiguration>(_config)
+                .AddSingleton<ILlmService, LlmService>()
                 .BuildServiceProvider();
 
             _client.Log += LogAsync;
