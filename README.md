@@ -17,6 +17,10 @@ This projects expects the following secrets to be present:
   "Ollama": {
     "ModelId": "<OLLAMA_MODEL>",
     "Endpoint": "<OLLAMA_ENDPOINT>"
+  },
+  "Google": {
+    "ApiKey": "<YOUR_GOOGLE_CUSTOM_SEARCH_API_KEY>",
+    "SearchEngineId": "YOUR_GOOGLE_SEARCH_ENGINE_ID"
   }
 }
 ```
@@ -27,6 +31,11 @@ The `GuildId` and `VoiceId` values are of type `ulong` that you need to copy fro
 You can get the `ModelId` from [Ollama](https://ollama.com/search) search.
 
 The `Endpoint` should be the default of `http://localhost:11434`.
+
+Google API key and Search Engine Id are required for the usage of Google Custom Search JSON API.
+You can see [this](https://developers.google.com/custom-search/v1/overview) to get your API key
+and look [here](https://developers.google.com/custom-search/v1/using_rest) to create your Google
+Search Engine (https://cse.google.com/all).
 
 ## Instructions
 Follow the [instructions](https://docs.discordnet.dev/guides/getting_started/first-bot.html) for how to make a bot,
@@ -44,3 +53,6 @@ The slash command `chat` remembers the user's previous messages so that you can 
 
 The AI functionality is created with Semantic Kernel and its Ollama integration. The specific model is up to the
 developer to set in the Secrets.
+
+To introduce the LLM with more recent information, Google Custom Search JSON API is used to search Google and get
+site knowledge.
