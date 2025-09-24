@@ -16,11 +16,13 @@ namespace DiscordNETBot.Infrastructure.LLM
         private readonly string GoogleApiKey;
         private readonly string GoogleSearchEngineId;
         private readonly HttpClient HttpClient;
+        private bool AllowGoogleSearch;
         OpenAIPromptExecutionSettings Settings = new()
         {
             MaxTokens = 300,
             Temperature = 0.7
         };
+
         private string SystemPrompt = """
             You are a helpful assistant. Here are your rules you need to adhere to:
             1. Keep your responses under 300 tokens. Consider the user prompt for how long
@@ -32,6 +34,7 @@ namespace DiscordNETBot.Infrastructure.LLM
         {
             var modelId = config["Ollama:ModelId"];
             var endpoint = config["Ollama:Endpoint"];
+            bool.TryParse(config["AllowGoogleSearch"], out AllowGoogleSearch);
 
             GoogleApiKey = config["Google:ApiKey"] ?? "";
             GoogleSearchEngineId = config["Google:SearchEngineId"] ?? "";
@@ -115,13 +118,18 @@ namespace DiscordNETBot.Infrastructure.LLM
 
             ChatHistory tempHistory = [.. history];
 
-            var webContext = await PerformGoogleSearchAsync(message);
+            var webContext = "";
+            if (AllowGoogleSearch)
+                webContext = await PerformGoogleSearchAsync(message);
+
+            var timeString = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss 'UTC'");
+            var extraInfo = $"The current date and time is {timeString}.\n";
             if (!string.IsNullOrWhiteSpace(webContext))
             {
-                tempHistory.AddDeveloperMessage(
-                    "Recent web search results (Google Custom Search). Use these to inform your answer and cite links when relevant:\n" +
-                    webContext);
+                extraInfo += "Recent web search results (Google Custom Search). Use these to inform your answer and cite links when relevant:\n" +
+                    webContext;
             }
+            tempHistory.AddDeveloperMessage(extraInfo);
 
             history.AddUserMessage(message);
             tempHistory.AddUserMessage(message);
@@ -138,13 +146,18 @@ namespace DiscordNETBot.Infrastructure.LLM
             ChatHistory history = [];
             history.AddDeveloperMessage(SystemPrompt);
 
-            var webContext = await PerformGoogleSearchAsync(message);
+            var webContext = "";
+            if (AllowGoogleSearch)
+                webContext = await PerformGoogleSearchAsync(message);
+
+            var timeString = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss 'UTC'");
+            var extraInfo = $"The current date and time is {timeString}.\n";
             if (!string.IsNullOrWhiteSpace(webContext))
             {
-                history.AddDeveloperMessage(
-                    "Recent web search results (Google Custom Search). Use these to inform your answer and cite links when relevant:\n" +
-                    webContext);
+                extraInfo += "Recent web search results (Google Custom Search). Use these to inform your answer and cite links when relevant:\n" +
+                    webContext;
             }
+            history.AddDeveloperMessage(extraInfo);
 
             history.AddUserMessage(message);
 
@@ -154,6 +167,26 @@ namespace DiscordNETBot.Infrastructure.LLM
                     kernel: Kernel);
 
             return response.Content!;
+        }
+
+        public async Task<bool> DeleteChatHistoryAsync(ulong guildId, ulong userId)
+        {
+            (ulong guildId, ulong userId) key = (guildId, userId);
+            return ConversationHistories.Remove(key);
+        }
+
+        public Task<string> SetAllowSearchAsync()
+        {
+            if (AllowGoogleSearch)
+            {
+                AllowGoogleSearch = false;
+                return Task.FromResult("Google search has been disabled.");
+            }
+            else
+            {
+                AllowGoogleSearch = true;
+                return Task.FromResult("Google search has been enabled.");
+            }
         }
     }
 }

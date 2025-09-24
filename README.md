@@ -8,6 +8,7 @@
   - [Instructions](#instructions)
 - [AI Functionality](#ai-functionality)
 - [Music Playback](#music-playback)
+- [Commands](#commands)
 
 ## Application overview
 
@@ -35,7 +36,8 @@ This projects expects the following secrets to be present:
   "Google": {
     "ApiKey": "<YOUR_GOOGLE_CUSTOM_SEARCH_API_KEY>",
     "SearchEngineId": "YOUR_GOOGLE_SEARCH_ENGINE_ID"
-  }
+  },
+  "AllowGoogleSearch": true
 }
 ```
 The `GuildId` and `VoiceId` values are of type `ulong` that you need to copy from your Discord server.
@@ -78,3 +80,16 @@ The bot joining the designated Voice Channel works best if you first make the bo
 `/join` and then use `/play` with your YouTube link to play the track. Sometimes the music playback also works
 with just `/play` when you are already in the Voice Channel. There could be a timing issue with how long after
 starting the project you do the commands.
+
+## Commands
+
+- `/user-info`: Displays information about the user in an embed. Information displayed includes: username,
+ID, account creation date and time, server join date and time.
+- `/join`: Make the bot to join the designated Voice Channel.
+- `/leave`: Make the bot leave the Voice Channel, if in one.
+- `/play`: Make the bot play a video from YouTube (intended for songs). Requires the user to be in a VC.
+- `queue`: Display the currently queued tracks.
+- `/ask`: Ask the language model some question.
+- `/chat`: Chat with AI. User prompts and AI responses are saved (in-memory, Dictionary).
+- `/clear-chat`: Clear the chat history for this specific user and server combination.
+- `/toggle-search`: Toggle whether the language model is allowed to use search.

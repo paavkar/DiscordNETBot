@@ -27,7 +27,7 @@ namespace DiscordNETBot.Modules
             LlmService = llmService;
         }
 
-        [SlashCommand("userinfo", "Get information about yourself")]
+        [SlashCommand("user-info", "Get information about yourself")]
         public async Task UserInfo()
         {
             SocketUser user = Context.User;
@@ -314,6 +314,25 @@ namespace DiscordNETBot.Modules
         {
             await DeferAsync(); // Acknowledge the command to avoid timeout
             var response = await LlmService.GetChatResponseAsync(Context.Guild.Id, Context.User.Id, message);
+            await FollowupAsync($"{Context.User.Mention} {response}");
+        }
+
+        [SlashCommand("clear-chat", "Clear your chat history with the AI", runMode: RunMode.Async)]
+        public async Task ClearChatAsync()
+        {
+            await DeferAsync(); // Acknowledge the command to avoid timeout
+            var success = await LlmService.DeleteChatHistoryAsync(Context.Guild.Id, Context.User.Id);
+            if (success)
+                await FollowupAsync($"{Context.User.Mention} Your chat history has been cleared.");
+            else
+                await FollowupAsync($"{Context.User.Mention} Failed to clear chat history. Please try again later.");
+        }
+
+        [SlashCommand("toggle-search", "Toggle AI web search capability", runMode: RunMode.Async)]
+        public async Task ToggleSearchAsync()
+        {
+            await DeferAsync(); // Acknowledge the command to avoid timeout
+            var response = await LlmService.SetAllowSearchAsync();
             await FollowupAsync($"{Context.User.Mention} {response}");
         }
     }

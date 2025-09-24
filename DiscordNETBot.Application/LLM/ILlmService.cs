@@ -4,5 +4,7 @@
     {
         Task<string> GetResponseAsync(string message);
         Task<string> GetChatResponseAsync(ulong guildId, ulong userId, string message);
+        Task<bool> DeleteChatHistoryAsync(ulong guildId, ulong userId);
+        Task<string> SetAllowSearchAsync();
     }
 }
