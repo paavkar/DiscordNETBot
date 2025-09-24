@@ -38,18 +38,14 @@ namespace DiscordNETBot.Modules
                 .AddField("Username", user.Username, true)
                 .AddField("Discriminator", user.Discriminator, true)
                 .AddField("ID", user.Id, true)
+                .AddField("Created At", user.CreatedAt.ToString("dd-MM-yyy HH:mm:ss"), false)
+                .AddField("Joined At", (user as SocketGuildUser)?.JoinedAt?.ToString("dd-MM-yyy HH:mm:ss") ?? "N/A", false)
                 .WithColor(Color.Blue)
                 .WithFooter("Requested via /userinfo")
                 .WithCurrentTimestamp()
                 .Build();
 
             await RespondAsync(Context.User.Mention, embed: embed);
-        }
-
-        [SlashCommand("say", "Make the bot say something")]
-        public async Task Say([Summary(description: "What should I say?")] string text)
-        {
-            await RespondAsync(text);
         }
 
         [SlashCommand("multioptions", "Command with multiple parameters")]
@@ -191,21 +187,7 @@ namespace DiscordNETBot.Modules
                         if (idx >= 0)
                             state.DisplayQueue.RemoveAt(idx);
 
-                        if (state.PlaybackChannel != null)
-                        {
-                            Embed nowPlayingEmbed = new EmbedBuilder()
-                                .WithTitle("▶️ Now Playing")
-                                .WithDescription($"**{track.Title}**")
-                                .AddField("Duration", FormatDuration(track.Duration), true)
-                                .AddField("Link", $"https://youtu.be/{track.Url}", true)
-                                .WithColor(Color.Green)
-                                .WithCurrentTimestamp()
-                                .Build();
-
-                            await state.PlaybackChannel.SendMessageAsync(embed: nowPlayingEmbed);
-                        }
-
-                        await PlayTrackAsync(state.AudioClient, track);
+                        await PlayTrackAsync(state.AudioClient, track, state);
                     }
                 }
             }
@@ -219,14 +201,29 @@ namespace DiscordNETBot.Modules
             }
         }
 
-        private async Task PlayTrackAsync(IAudioClient client, TrackInfo track)
+        private async Task PlayTrackAsync(IAudioClient client, TrackInfo track, GuildMusicState state)
         {
-            YoutubeClient youtube = new YoutubeClient();
+            YoutubeClient youtube = new();
             ValueTask<StreamManifest> manifestTask = youtube.Videos.Streams.GetManifestAsync(track.Url);
             StreamManifest manifest = await manifestTask;
 
             IStreamInfo audioStreamInfo = manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
             var streamUrl = audioStreamInfo.Url;
+
+            if (state.PlaybackChannel != null)
+            {
+                Embed nowPlayingEmbed = new EmbedBuilder()
+                    .WithTitle("▶️ Now Playing")
+                    .WithDescription($"**{track.Title}**")
+                    .AddField("Duration", FormatDuration(track.Duration), true)
+                    .AddField("Link", $"https://youtu.be/{track.Url}", true)
+                    .WithColor(Color.Green)
+                    .WithCurrentTimestamp()
+                    .Build();
+
+                await state.PlaybackChannel.SendMessageAsync(embed: nowPlayingEmbed);
+            }
+
             using Process? ffmpeg = Process.Start(new ProcessStartInfo
             {
                 FileName = "ffmpeg",

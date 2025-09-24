@@ -1,11 +1,25 @@
-# Application overview
+# DiscordNETBot
+
+## Table of Contents
+
+- [Application overview](#application-overview)
+- [Running Locally](#running-locally)
+  - [User Secrets](#user-secrets)
+  - [Instructions](#instructions)
+- [AI Functionality](#ai-functionality)
+- [Music Playback](#music-playback)
+
+## Application overview
 
 This application is a Discord bot created with [Discord.NET](https://docs.discordnet.dev/).
+
+The bot is also capable of music playback in a Voice Channel.
+
 Clean Architecture is used in architecting the project structure.
 
-# Running locally
+## Running locally
 
-## User secrets
+### User secrets
 
 This projects expects the following secrets to be present:
 
@@ -37,14 +51,14 @@ You can see [this](https://developers.google.com/custom-search/v1/overview) to g
 and look [here](https://developers.google.com/custom-search/v1/using_rest) to create your Google
 Search Engine (https://cse.google.com/all).
 
-## Instructions
+### Instructions
 Follow the [instructions](https://docs.discordnet.dev/guides/getting_started/first-bot.html) for how to make a bot,
 invite it to your server, and how to get the token you need for the User Secret.
 
 Microsoft has [instructions](https://learn.microsoft.com/en-us/semantic-kernel/concepts/ai-services/chat-completion/?tabs=csharp-Ollama%2Cpython-AzureOpenAI%2Cjava-AzureOpenAI&pivots=programming-language-csharp) for starting Ollama
 or you can use the [quickstart](https://docs.ollama.com/quickstart) from Ollama.
 
-# AI functionality
+## AI functionality
 
 This bot has two commands that use the Ollama LLM. The slash command `ask` is simple in that it uses the Ollama LLM
 to answer user's question/prompt.
@@ -56,3 +70,11 @@ developer to set in the Secrets.
 
 To introduce the LLM with more recent information, Google Custom Search JSON API is used to search Google and get
 site knowledge.
+
+## Music playback
+
+The music playback is a little buggy. It is made with [YoutubeExplode](https://github.com/Tyrrrz/YoutubeExplode).
+The bot joining the designated Voice Channel works best if you first make the bot to join the channel with
+`/join` and then use `/play` with your YouTube link to play the track. Sometimes the music playback also works
+with just `/play` when you are already in the Voice Channel. There could be a timing issue with how long after
+starting the project you do the commands.
