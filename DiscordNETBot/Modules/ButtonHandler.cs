@@ -24,6 +24,13 @@ namespace DiscordNETBot.Modules
                     guild.EveryoneRole.Id,
                     PermissionTarget.Role,
                     new OverwritePermissions(viewChannel: PermValue.Deny)
+                ),
+                new(
+                    Context.User.Id,
+                    PermissionTarget.User,
+                    new OverwritePermissions(
+                        viewChannel: PermValue.Allow,
+                        sendMessages: PermValue.Allow)
                 )
             ];
 

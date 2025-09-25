@@ -12,7 +12,6 @@ namespace DiscordNETBot
         DiscordSocketClient client,
         IConfiguration config) : BackgroundService
     {
-
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             ISubscriber subscriber = redis.GetSubscriber();
@@ -24,7 +23,13 @@ namespace DiscordNETBot
 
                     // Example: send to a specific channel in Discord
                     SocketGuild guild = client.GetGuild(ulong.Parse(config["GuildId"]!));
-                    SocketTextChannel? textChannel = guild?.GetTextChannel(ulong.Parse(config["TextChannelId"]!));
+                    SocketTextChannel? textChannel = guild?.TextChannels
+                        .FirstOrDefault(
+                            c => c.Name.Equals(
+                                config["TextChannelName"],
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                        );
                     if (textChannel != null)
                     {
                         await textChannel.SendMessageAsync($"[Redis] {message}");

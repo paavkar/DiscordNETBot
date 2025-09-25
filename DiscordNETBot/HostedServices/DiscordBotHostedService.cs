@@ -65,8 +65,11 @@ namespace DiscordNETBot
 
         private async Task ReadyAsync()
         {
-            var guildId = ulong.Parse(_config["GuildId"]!);
-            IReadOnlyCollection<RestGuildCommand> commands = await _interactionService.RegisterCommandsToGuildAsync(guildId);
+            IReadOnlyCollection<SocketGuild> guilds = _client.Guilds;
+            foreach (SocketGuild? guild in guilds)
+            {
+                await _interactionService.RegisterCommandsToGuildAsync(guild.Id);
+            }
 
             _logger.LogInformation("Bot is ready!");
         }

@@ -14,25 +14,13 @@ using YoutubeExplode.Videos.Streams;
 
 namespace DiscordNETBot.Modules
 {
-    public class MyCommands : InteractionModuleBase<SocketInteractionContext>
+    public class MyCommands(
+        IVoiceService voiceService,
+        IConfiguration config,
+        ILlmService llmService,
+        IConnectionMultiplexer redis) : InteractionModuleBase<SocketInteractionContext>
     {
-        private readonly ulong VoiceId;
-        private readonly IVoiceService VoiceService;
         private readonly YoutubeClient _youtube = new();
-        private readonly ILlmService LlmService;
-        private readonly IConnectionMultiplexer _redis;
-
-        public MyCommands(
-            IVoiceService voiceService,
-            IConfiguration config,
-            ILlmService llmService,
-            IConnectionMultiplexer redis)
-        {
-            VoiceService = voiceService;
-            VoiceId = ulong.Parse(config["VoiceId"]);
-            LlmService = llmService;
-            _redis = redis;
-        }
 
         [SlashCommand(
             "create-channel-button",
@@ -52,7 +40,7 @@ namespace DiscordNETBot.Modules
         [SlashCommand("redis-test", "Test Redis pub/sub functionality")]
         public async Task RedisTest()
         {
-            ISubscriber sub = _redis.GetSubscriber();
+            ISubscriber sub = redis.GetSubscriber();
             var msg = $"Redis test at {DateTimeOffset.UtcNow} from {Context.User.Username}";
             await sub.PublishAsync("discord-events", msg);
             await RespondAsync("Published test message to Redis.", ephemeral: true);
@@ -103,23 +91,25 @@ namespace DiscordNETBot.Modules
             OptionC
         }
 
-        [SlashCommand("button-demo", "Show a message with buttons")]
-        public async Task ButtonDemo()
-        {
-            ComponentBuilder builder = new ComponentBuilder()
-                .WithButton("Click Me!", "btn_click", ButtonStyle.Primary)
-                .WithButton("Danger!", "btn_danger", ButtonStyle.Danger);
-
-            await RespondAsync("Here are some buttons:", components: builder.Build());
-        }
-
         // /join [channel]
         [SlashCommand("join", "Join your current voice channel", runMode: RunMode.Async)]
         public async Task JoinAsync()
         {
-            SocketVoiceChannel channel = Context.Guild.GetVoiceChannel(VoiceId);
-
-            IAudioClient? audioClient = await VoiceService.ConnectAsync(channel);
+            var voiceName = config["VoiceChannelName"];
+            SocketVoiceChannel channel = Context.Guild.VoiceChannels
+                .FirstOrDefault(c => c.Name.Equals(voiceName, StringComparison.OrdinalIgnoreCase))!;
+            if (channel is null)
+            {
+                await Context.Guild.CreateVoiceChannelAsync(voiceName);
+                channel = Context.Guild.VoiceChannels
+                    .FirstOrDefault(c => c.Name.Equals(voiceName, StringComparison.OrdinalIgnoreCase))!;
+            }
+            if (channel is null)
+            {
+                await RespondAsync("Voice channel not found and could not be created.", ephemeral: true);
+                return;
+            }
+            IAudioClient? audioClient = await voiceService.ConnectAsync(channel);
             if (audioClient is not null)
                 await RespondAsync($"Joined **{channel.Name}** ✅");
         }
@@ -129,7 +119,7 @@ namespace DiscordNETBot.Modules
         {
             var guildId = Context.Guild.Id;
 
-            if (!VoiceService.AudioClients.TryGetValue(guildId, out IAudioClient? client))
+            if (!voiceService.AudioClients.TryGetValue(guildId, out IAudioClient? client))
             {
                 await RespondAsync("I'm not in a voice channel.", ephemeral: true);
                 return;
@@ -142,13 +132,12 @@ namespace DiscordNETBot.Modules
             }
             catch (Exception ex)
             {
-                // Log if you have a logger, but don't crash the command
                 Console.WriteLine($"Error while leaving voice in guild {guildId}: {ex}");
             }
             finally
             {
                 // Always remove from service to prevent stale/disposed client reuse
-                VoiceService.RemoveAudioClient(guildId);
+                voiceService.RemoveAudioClient(guildId);
             }
 
             await RespondAsync("Left the voice channel 👋");
@@ -160,21 +149,19 @@ namespace DiscordNETBot.Modules
             string url,
             ISocketMessageChannel channel)
         {
-            GuildMusicState state = VoiceService.MusicStates.GetOrAdd(guild.Id, _ => new GuildMusicState());
+            GuildMusicState state = voiceService.MusicStates.GetOrAdd(guild.Id, _ => new GuildMusicState());
 
             state.PlaybackChannel = channel;
             // Get video info
             Video video = await _youtube.Videos.GetAsync(url);
             TimeSpan duration = video.Duration ?? TimeSpan.Zero;
-            TrackInfo track = new TrackInfo(video.Title, video.Id.Value, duration);
+            TrackInfo track = new(video.Title, video.Id.Value, duration);
 
             await state.Queue.Writer.WriteAsync(track);
             state.DisplayQueue.Add(track);
 
             // Build queue list with durations
-            List<string> queueList = state.DisplayQueue
-                .Select((t, i) => $"{i + 1}. {t.Title} [{FormatDuration(t.Duration)}]")
-                .ToList();
+            List<string> queueList = [.. state.DisplayQueue.Select((t, i) => $"{i + 1}. {t.Title} [{FormatDuration(t.Duration)}]")];
             TimeSpan totalTime = state.DisplayQueue.Aggregate(TimeSpan.Zero, (sum, t) => sum + t.Duration);
 
             Embed embed = new EmbedBuilder()
@@ -281,6 +268,7 @@ namespace DiscordNETBot.Modules
         [SlashCommand("play", "Play a track from a URL or search query", runMode: RunMode.Async)]
         public async Task PlayAsync(string query)
         {
+            var voiceName = config["VoiceChannelName"];
             IGuildUser? user = Context.User as IGuildUser;
             IVoiceChannel? userChannel = user?.VoiceChannel;
 
@@ -290,7 +278,20 @@ namespace DiscordNETBot.Modules
                 return;
             }
 
-            SocketVoiceChannel channel = Context.Guild.GetVoiceChannel(VoiceId);
+            SocketVoiceChannel channel = Context.Guild.VoiceChannels
+                .FirstOrDefault(c => c.Name.Equals(voiceName, StringComparison.OrdinalIgnoreCase))!;
+
+            if (channel is null)
+            {
+                await Context.Guild.CreateVoiceChannelAsync(voiceName);
+                channel = Context.Guild.VoiceChannels
+                    .FirstOrDefault(c => c.Name.Equals(voiceName, StringComparison.OrdinalIgnoreCase))!;
+            }
+            if (channel is null)
+            {
+                await RespondAsync("Voice channel not found and could not be created.", ephemeral: true);
+                return;
+            }
 
             if (channel == null)
             {
@@ -298,11 +299,10 @@ namespace DiscordNETBot.Modules
                 return;
             }
 
-            IAudioClient audioClient;
-            if (!VoiceService.AudioClients.TryGetValue(channel.Guild.Id, out audioClient) ||
+            if (!voiceService.AudioClients.TryGetValue(channel.Guild.Id, out IAudioClient? audioClient) ||
                 audioClient.ConnectionState != ConnectionState.Connected)
             {
-                audioClient = await VoiceService.ConnectAsync(channel);
+                audioClient = await voiceService.ConnectAsync(channel);
                 await Task.Delay(500); // handshake buffer
             }
 
@@ -313,7 +313,7 @@ namespace DiscordNETBot.Modules
         [SlashCommand("queue", "Display the current queue")]
         public async Task DisplayQueue()
         {
-            GuildMusicState state = VoiceService.MusicStates.GetOrAdd(Context.Guild.Id, _ => new GuildMusicState());
+            GuildMusicState state = voiceService.MusicStates.GetOrAdd(Context.Guild.Id, _ => new GuildMusicState());
             List<string> queueList = state.DisplayQueue
                 .Select((t, i) => $"{i + 1}. {t.Title} [{FormatDuration(t.Duration)}]")
                 .ToList();
@@ -335,7 +335,7 @@ namespace DiscordNETBot.Modules
         public async Task AskAsync([Summary(description: "Your question")] string question)
         {
             await DeferAsync(); // Acknowledge the command to avoid timeout
-            var response = await LlmService.GetResponseAsync(question);
+            var response = await llmService.GetResponseAsync(question);
             await FollowupAsync($"{Context.User.Mention} {response}");
         }
 
@@ -343,7 +343,7 @@ namespace DiscordNETBot.Modules
         public async Task ChatAsync([Summary(description: "Your message")] string message)
         {
             await DeferAsync(); // Acknowledge the command to avoid timeout
-            var response = await LlmService.GetChatResponseAsync(Context.Guild.Id, Context.User.Id, message);
+            var response = await llmService.GetChatResponseAsync(Context.Guild.Id, Context.User.Id, message);
             await FollowupAsync($"{Context.User.Mention} {response}");
         }
 
@@ -351,7 +351,7 @@ namespace DiscordNETBot.Modules
         public async Task ClearChatAsync()
         {
             await DeferAsync(); // Acknowledge the command to avoid timeout
-            var success = await LlmService.DeleteChatHistoryAsync(Context.Guild.Id, Context.User.Id);
+            var success = await llmService.DeleteChatHistoryAsync(Context.Guild.Id, Context.User.Id);
             if (success)
                 await FollowupAsync($"{Context.User.Mention} Your chat history has been cleared.");
             else
@@ -362,7 +362,7 @@ namespace DiscordNETBot.Modules
         public async Task ToggleSearchAsync()
         {
             await DeferAsync(); // Acknowledge the command to avoid timeout
-            var response = await LlmService.SetAllowSearchAsync();
+            var response = await llmService.SetAllowSearchAsync();
             await FollowupAsync($"{Context.User.Mention} {response}");
         }
     }

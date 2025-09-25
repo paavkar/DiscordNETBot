@@ -34,8 +34,8 @@ This projects expects the following secrets to be present:
 {
   "BotToken": "<YOUR_DISCORD_BOT_TOKEN>",
   "GuildId": <YOUR_DISCORD_SERVER_ID>,
-  "VoiceId": <YOUR_DISCORD_SERVER_VOICE_CHANNEL_ID>,
-  "TextChannelId": <YOUR_TEXT_CHANNEL_FOR_BOT>,
+  "VoiceChannelName": <VOICE_CHANNEL_FOR_BOT>,
+  "TextChannelName": <TEXT_CHANNEL_FOR_BOT>,
   "Ollama": {
     "ModelId": "<OLLAMA_MODEL>",
     "Endpoint": "<OLLAMA_ENDPOINT>"
@@ -48,11 +48,11 @@ This projects expects the following secrets to be present:
   "RedisConnection": "<REDIS_CONNECTION_STRING>"
 }
 ```
-The `GuildId`, `VoiceId` and `TextChannelId` values are of type `ulong` that you need to copy from your Discord server.
+The `GuildId` value is of type `ulong` that you need to copy from your Discord server.
 
-`VoiceId` is used when connecting the bot to a Voice Channel.
+`VoiceChannelName` is used when connecting the bot to a Voice Channel.
 
-`TextChannelId` is currently used for Redis Pub/Sub testing.
+`TextChannelName` is currently used for Redis Pub/Sub testing.
 
 You can get the `ModelId` from [Ollama](https://ollama.com/search) search.
 
@@ -108,3 +108,4 @@ ID, account creation date and time, server join date and time.
 - `/clear-chat`: Clear the chat history for this specific user and server combination.
 - `/toggle-search`: Toggle whether the language model is allowed to use search.
 - `/redis-test`: Used to test redis Pub/Sub is working.
+- `/create-channel-button`: Creates a message with a button that creates a private channel.
