@@ -40,6 +40,33 @@ namespace DiscordNETBot.Modules
             }
 
             var lastIndex = 0;
+            var categoryName = "Test category";
+            SocketCategoryChannel? existingCategory = guild.CategoryChannels
+                .FirstOrDefault(
+                c => c.Name.Equals(
+                    categoryName,
+                    StringComparison.OrdinalIgnoreCase
+                    )
+                );
+            if (existingCategory is null)
+            {
+                RestCategoryChannel? createdCategory = await guild.CreateCategoryChannelAsync(
+                    categoryName,
+                    props =>
+                    {
+                        props.Position = 0;
+                    }
+                    );
+                if (createdCategory is not null)
+                {
+                    existingCategory = guild.GetCategoryChannel(createdCategory.Id);
+                }
+            }
+            if (existingCategory is null)
+            {
+                await RespondAsync("Channel creation encountered and error with the channel category.", ephemeral: true);
+                return;
+            }
             IEnumerable<SocketGuildChannel> channels = guild.Channels
                             .Where(c => c.Name.StartsWith("test-channel"));
             if (channels.Any())
@@ -50,7 +77,12 @@ namespace DiscordNETBot.Modules
 
             RestTextChannel newChannel = await guild.CreateTextChannelAsync(
                 $"test-channel-{lastIndex + 1}",
-                props => props.PermissionOverwrites = overwrites);
+                props =>
+                {
+                    props.PermissionOverwrites = overwrites;
+                    props.CategoryId = existingCategory!.Id;
+                }
+            );
             await RespondAsync($"Created new channel: {newChannel.Mention}", ephemeral: true);
         }
     }
