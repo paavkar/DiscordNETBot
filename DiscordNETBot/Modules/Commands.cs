@@ -34,6 +34,18 @@ namespace DiscordNETBot.Modules
             _redis = redis;
         }
 
+        [SlashCommand("create-channel-button", "Test for creating a channel")]
+        public async Task CreateChannelButton()
+        {
+            ComponentBuilder builder = new ComponentBuilder()
+                .WithButton("Create Channel", "btn-create-channel", ButtonStyle.Primary);
+
+            await RespondAsync(
+                "Press this button to create a private channel:",
+                components: builder.Build()
+            );
+        }
+
         [SlashCommand("redis-test", "Test Redis pub/sub functionality")]
         public async Task RedisTest()
         {
@@ -108,7 +120,6 @@ namespace DiscordNETBot.Modules
             if (audioClient is not null)
                 await RespondAsync($"Joined **{channel.Name}** ✅");
         }
-
 
         [SlashCommand("leave", "Make the bot leave the current voice channel")]
         public async Task LeaveAsync()
