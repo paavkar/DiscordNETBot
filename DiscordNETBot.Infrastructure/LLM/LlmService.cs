@@ -1,5 +1,6 @@
-﻿using DiscordNETBot.Application.LLM;
-using Microsoft.Extensions.Configuration;
+﻿using AngleSharp;
+using AngleSharp.Dom;
+using DiscordNETBot.Application.LLM;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
@@ -30,7 +31,7 @@ namespace DiscordNETBot.Infrastructure.LLM
             2. You will be responding to messages in a Discord server. Make sure
             your responses include Discord markdown formatting where appropriate.
             """;
-        public LlmService(IConfiguration config)
+        public LlmService(Microsoft.Extensions.Configuration.IConfiguration config)
         {
             var modelId = config["Ollama:ModelId"];
             var endpoint = config["Ollama:Endpoint"];
@@ -87,16 +88,23 @@ namespace DiscordNETBot.Infrastructure.LLM
 
                     sb.AppendLine($"Result {index}:");
                     if (!string.IsNullOrWhiteSpace(title)) sb.AppendLine($"Title: {title}");
-                    if (!string.IsNullOrWhiteSpace(snippet)) sb.AppendLine($"Snippet: {snippet}");
+                    //if (!string.IsNullOrWhiteSpace(snippet)) sb.AppendLine($"Snippet: {snippet}");
                     if (!string.IsNullOrWhiteSpace(link)) sb.AppendLine($"Link: {link}");
-                    sb.AppendLine();
 
+                    var extract = await ExtractMainTextWithAngleSharpAsync(link);
+                    if (string.IsNullOrWhiteSpace(extract))
+                        extract = "(No readable content extracted)";
+
+                    if (extract.Length > 1500) extract = extract[..1500] + "…";
+                    sb.AppendLine($"Extract: {extract}");
+
+                    sb.AppendLine();
                     index++;
                 }
 
                 var resultText = sb.ToString().Trim();
                 // Keep result reasonably short for prompt injection
-                if (resultText.Length > 2800) resultText = string.Concat(resultText.AsSpan(0, 2800), "…");
+                //if (resultText.Length > 2800) resultText = string.Concat(resultText.AsSpan(0, 2800), "…");
                 return resultText;
             }
             catch
@@ -104,6 +112,75 @@ namespace DiscordNETBot.Infrastructure.LLM
                 // Swallow exceptions; search is best-effort to provide recent context.
                 return null;
             }
+        }
+
+        private async Task<string?> ExtractMainTextWithAngleSharpAsync(string? url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return null;
+
+            HttpRequestMessage req = new(HttpMethod.Get, url);
+            req.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36");
+            req.Headers.Accept.ParseAdd("text/html,application/xhtml+xml;q=0.9,*/*;q=0.8");
+
+            using HttpResponseMessage resp = await HttpClient.SendAsync(req, HttpCompletionOption.ResponseContentRead);
+            if (!resp.IsSuccessStatusCode) return null;
+
+            var contentType = resp.Content.Headers.ContentType?.MediaType ?? "";
+            if (!contentType.Contains("html")) return null;
+
+            var html = await resp.Content.ReadAsStringAsync();
+
+            // Parse HTML with AngleSharp
+            AngleSharp.IConfiguration config = Configuration.Default;
+            IBrowsingContext context = BrowsingContext.New(config);
+            IDocument doc = await context.OpenAsync(req => req.Content(html).Address(url));
+
+            // Remove obvious noise
+            RemoveNodes(doc, "script, style, noscript, svg, canvas");
+            RemoveNodes(doc, ".advert, .ads, .ad, .cookie, .cookie-banner, .header, header, .nav, nav, .footer, footer");
+
+            // Try to find main content
+            IElement? main =
+                doc.QuerySelector("article") ??
+                doc.QuerySelector("main") ??
+                doc.QuerySelector("[role='main']") ??
+                FindLargestTextContainer(doc.Body);
+
+            if (main is null) return null;
+
+            var text = NormalizeWhitespace(main.TextContent);
+            if (text.Length < 200) return null; // skip if too short
+
+            return text;
+        }
+
+        private static void RemoveNodes(IDocument doc, string selector)
+        {
+            foreach (IElement node in doc.QuerySelectorAll(selector))
+                node.Remove();
+        }
+
+        private static IElement? FindLargestTextContainer(IElement? root)
+        {
+            if (root == null) return null;
+            IElement? best = null;
+            var bestLen = 0;
+
+            foreach (IElement el in root.QuerySelectorAll("div, section, article, main"))
+            {
+                var len = el.TextContent?.Length ?? 0;
+                if (len > bestLen)
+                {
+                    bestLen = len;
+                    best = el;
+                }
+            }
+            return best;
+        }
+
+        private static string NormalizeWhitespace(string s)
+        {
+            return System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ").Trim();
         }
 
         public async Task<string> GetChatResponseAsync(ulong guildId, ulong userId, string message)

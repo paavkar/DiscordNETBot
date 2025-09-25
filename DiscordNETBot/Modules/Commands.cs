@@ -6,6 +6,7 @@ using DiscordNETBot.Application.LLM;
 using DiscordNETBot.Application.Voice;
 using DiscordNETBot.Domain.Voice;
 using Microsoft.Extensions.Configuration;
+using StackExchange.Redis;
 using System.Diagnostics;
 using YoutubeExplode;
 using YoutubeExplode.Videos;
@@ -19,12 +20,27 @@ namespace DiscordNETBot.Modules
         private readonly IVoiceService VoiceService;
         private readonly YoutubeClient _youtube = new();
         private readonly ILlmService LlmService;
+        private readonly IConnectionMultiplexer _redis;
 
-        public MyCommands(IVoiceService voiceService, IConfiguration config, ILlmService llmService)
+        public MyCommands(
+            IVoiceService voiceService,
+            IConfiguration config,
+            ILlmService llmService,
+            IConnectionMultiplexer redis)
         {
             VoiceService = voiceService;
             VoiceId = ulong.Parse(config["VoiceId"]);
             LlmService = llmService;
+            _redis = redis;
+        }
+
+        [SlashCommand("redis-test", "Test Redis pub/sub functionality")]
+        public async Task RedisTest()
+        {
+            ISubscriber sub = _redis.GetSubscriber();
+            var msg = $"Redis test at {DateTimeOffset.UtcNow} from {Context.User.Username}";
+            await sub.PublishAsync("discord-events", msg);
+            await RespondAsync("Published test message to Redis.", ephemeral: true);
         }
 
         [SlashCommand("user-info", "Get information about yourself")]
@@ -38,8 +54,8 @@ namespace DiscordNETBot.Modules
                 .AddField("Username", user.Username, true)
                 .AddField("Discriminator", user.Discriminator, true)
                 .AddField("ID", user.Id, true)
-                .AddField("Created At", user.CreatedAt.ToString("dd-MM-yyy HH:mm:ss"), false)
-                .AddField("Joined At", (user as SocketGuildUser)?.JoinedAt?.ToString("dd-MM-yyy HH:mm:ss") ?? "N/A", false)
+                .AddField("Created At", user.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"), false)
+                .AddField("Joined At", (user as SocketGuildUser)?.JoinedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A", false)
                 .WithColor(Color.Blue)
                 .WithFooter("Requested via /userinfo")
                 .WithCurrentTimestamp()

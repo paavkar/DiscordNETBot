@@ -20,6 +20,12 @@ Clean Architecture is used in architecting the project structure.
 
 ## Running locally
 
+### Requirements
+
+- [.NET 8](https://dotnet.microsoft.com/en-us/download)
+- Ollama
+- Redis
+
 ### User secrets
 
 This projects expects the following secrets to be present:
@@ -29,6 +35,7 @@ This projects expects the following secrets to be present:
   "BotToken": "<YOUR_DISCORD_BOT_TOKEN>",
   "GuildId": <YOUR_DISCORD_SERVER_ID>,
   "VoiceId": <YOUR_DISCORD_SERVER_VOICE_CHANNEL_ID>,
+  "TextChannelId": <YOUR_TEXT_CHANNEL_FOR_BOT>,
   "Ollama": {
     "ModelId": "<OLLAMA_MODEL>",
     "Endpoint": "<OLLAMA_ENDPOINT>"
@@ -37,12 +44,15 @@ This projects expects the following secrets to be present:
     "ApiKey": "<YOUR_GOOGLE_CUSTOM_SEARCH_API_KEY>",
     "SearchEngineId": "YOUR_GOOGLE_SEARCH_ENGINE_ID"
   },
-  "AllowGoogleSearch": true
+  "AllowGoogleSearch": true,
+  "RedisConnection": "<REDIS_CONNECTION_STRING>"
 }
 ```
-The `GuildId` and `VoiceId` values are of type `ulong` that you need to copy from your Discord server.
+The `GuildId`, `VoiceId` and `TextChannelId` values are of type `ulong` that you need to copy from your Discord server.
 
 `VoiceId` is used when connecting the bot to a Voice Channel.
+
+`TextChannelId` is currently used for Redis Pub/Sub testing.
 
 You can get the `ModelId` from [Ollama](https://ollama.com/search) search.
 
@@ -53,7 +63,11 @@ You can see [this](https://developers.google.com/custom-search/v1/overview) to g
 and look [here](https://developers.google.com/custom-search/v1/using_rest) to create your Google
 Search Engine (https://cse.google.com/all).
 
+`RedisConnection` can be the default `localhost:6379` as long as you haven't changed it, or
+if you have a cloud-based one.
+
 ### Instructions
+
 Follow the [instructions](https://docs.discordnet.dev/guides/getting_started/first-bot.html) for how to make a bot,
 invite it to your server, and how to get the token you need for the User Secret.
 
@@ -88,8 +102,9 @@ ID, account creation date and time, server join date and time.
 - `/join`: Make the bot to join the designated Voice Channel.
 - `/leave`: Make the bot leave the Voice Channel, if in one.
 - `/play`: Make the bot play a video from YouTube (intended for songs). Requires the user to be in a VC.
-- `queue`: Display the currently queued tracks.
+- `/queue`: Display the currently queued tracks.
 - `/ask`: Ask the language model some question.
 - `/chat`: Chat with AI. User prompts and AI responses are saved (in-memory, Dictionary).
 - `/clear-chat`: Clear the chat history for this specific user and server combination.
 - `/toggle-search`: Toggle whether the language model is allowed to use search.
+- `/redis-test`: Used to test redis Pub/Sub is working.
