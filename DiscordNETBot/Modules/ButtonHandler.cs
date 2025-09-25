@@ -7,7 +7,7 @@ namespace DiscordNETBot.Modules
 {
     public class ButtonHandler : InteractionModuleBase<SocketInteractionContext>
     {
-        [ComponentInteraction("btn-create-channel")]
+        [ComponentInteraction("btn-create-channel", runMode: RunMode.Async)]
         public async Task CreateChannel()
         {
             SocketGuild guild = Context.Guild;
@@ -39,10 +39,17 @@ namespace DiscordNETBot.Modules
                 ));
             }
 
-            var channelCount = guild.Channels.Count(c => c.Name.StartsWith("test-channel"));
+            var lastIndex = 0;
+            IEnumerable<SocketGuildChannel> channels = guild.Channels
+                            .Where(c => c.Name.StartsWith("test-channel"));
+            if (channels.Any())
+            {
+                IEnumerable<int> indexes = channels.Select(c => int.TryParse(c.Name.Split('-').Last(), out var i) ? i : 0);
+                lastIndex = indexes.Max();
+            }
 
             RestTextChannel newChannel = await guild.CreateTextChannelAsync(
-                $"test-channel-{channelCount + 1}",
+                $"test-channel-{lastIndex + 1}",
                 props => props.PermissionOverwrites = overwrites);
             await RespondAsync($"Created new channel: {newChannel.Mention}", ephemeral: true);
         }

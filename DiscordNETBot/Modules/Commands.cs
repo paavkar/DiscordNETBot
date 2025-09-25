@@ -34,7 +34,10 @@ namespace DiscordNETBot.Modules
             _redis = redis;
         }
 
-        [SlashCommand("create-channel-button", "Test for creating a channel")]
+        [SlashCommand(
+            "create-channel-button",
+            "Create a button that creates a private channel."
+        )]
         public async Task CreateChannelButton()
         {
             ComponentBuilder builder = new ComponentBuilder()
