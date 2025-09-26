@@ -49,10 +49,9 @@ namespace DiscordNETBot
                         }
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
-
-                    throw;
+                    _logger.LogError(ex, "Error handling modal submission");
                 }
             };
 
