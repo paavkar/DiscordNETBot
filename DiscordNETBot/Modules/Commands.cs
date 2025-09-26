@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using StackExchange.Redis;
 using System.Diagnostics;
 using YoutubeExplode;
+using YoutubeExplode.Common;
 using YoutubeExplode.Videos;
 using YoutubeExplode.Videos.Streams;
 
@@ -21,6 +22,40 @@ namespace DiscordNETBot.Modules
         IConnectionMultiplexer redis) : InteractionModuleBase<SocketInteractionContext>
     {
         private readonly YoutubeClient _youtube = new();
+
+        [SlashCommand("poll", "Create a poll", runMode: RunMode.Async)]
+        public async Task Poll2(
+            [Summary(description: "Your question for the poll")] string question,
+            [Summary(description: "How many options? (2-10)")] int optionCount,
+            [Summary(description: "Poll duration (hours)")] uint duration,
+            [Summary(description: "Allow multiselect")] bool multiSelect
+)
+        {
+            if (optionCount is < 2 or > 10)
+            {
+                await RespondAsync("Option count must be between 2 and 10.", ephemeral: true);
+                return;
+            }
+
+            var safeQuestion = Uri.EscapeDataString(question);
+            // Build modal dynamically
+            ModalBuilder modalBuilder = new ModalBuilder()
+                .WithTitle("Enter poll options")
+                .WithCustomId($"poll_modal:{optionCount}:{duration}:{multiSelect}:{safeQuestion}");
+
+            for (var i = 1; i <= optionCount; i++)
+            {
+                modalBuilder.AddTextInput(
+                    label: $"Option {i}",
+                    customId: $"option_{i}",
+                    placeholder: $"Enter option {i} text",
+                    required: true,
+                    style: TextInputStyle.Short
+                );
+            }
+
+            await RespondWithModalAsync(modalBuilder.Build());
+        }
 
         [SlashCommand(
             "create-channel-button",
@@ -154,8 +189,9 @@ namespace DiscordNETBot.Modules
             state.PlaybackChannel = channel;
             // Get video info
             Video video = await _youtube.Videos.GetAsync(url);
+            var thumbnailUrl = video.Thumbnails.TryGetWithHighestResolution()?.Url;
             TimeSpan duration = video.Duration ?? TimeSpan.Zero;
-            TrackInfo track = new(video.Title, video.Id.Value, duration);
+            TrackInfo track = new(video.Title, video.Id.Value, duration, thumbnailUrl);
 
             await state.Queue.Writer.WriteAsync(track);
             state.DisplayQueue.Add(track);
@@ -232,6 +268,7 @@ namespace DiscordNETBot.Modules
                 Embed nowPlayingEmbed = new EmbedBuilder()
                     .WithTitle("▶️ Now Playing")
                     .WithDescription($"**{track.Title}**")
+                    .WithThumbnailUrl(track.ThumbnailUrl)
                     .AddField("Duration", FormatDuration(track.Duration), true)
                     .AddField("Link", $"https://youtu.be/{track.Url}", true)
                     .WithColor(Color.Green)

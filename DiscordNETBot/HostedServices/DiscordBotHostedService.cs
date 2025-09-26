@@ -30,12 +30,38 @@ namespace DiscordNETBot
             _client.MessageReceived += OnMessageReceived;
             _client.UserVoiceStateUpdated += OnUserVoiceStateUpdated;
 
-            // Login & start
-            await _client.LoginAsync(TokenType.Bot, _config["BotToken"]);
-            await _client.StartAsync();
+            _client.ModalSubmitted += async modal =>
+            {
+                try
+                {
+                    var parts = modal.Data.CustomId.Split(":");
+
+                    if (parts.Length > 0)
+                    {
+                        switch (parts[0])
+                        {
+                            case "poll_modal":
+                                await HandlePollModal(modal, parts);
+                                break;
+                            default:
+                                _logger.LogInformation("Unknown modal submitted: {ModalId}", modal.Data.CustomId);
+                                break;
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+
+                    throw;
+                }
+            };
 
             // Load commands
             await _interactionService.AddModulesAsync(typeof(Program).Assembly, _services);
+
+            // Login & start
+            await _client.LoginAsync(TokenType.Bot, _config["BotToken"]);
+            await _client.StartAsync();
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
@@ -79,7 +105,11 @@ namespace DiscordNETBot
             try
             {
                 SocketInteractionContext ctx = new(_client, interaction);
-                await _interactionService.ExecuteCommandAsync(ctx, _services);
+                IResult result = await _interactionService.ExecuteCommandAsync(ctx, _services);
+                if (!result.IsSuccess)
+                {
+                    _logger.LogError("Interaction for type {InterActionType} failed: {Reason}", interaction.Type, result.ErrorReason);
+                }
             }
             catch (Exception ex)
             {
@@ -90,6 +120,66 @@ namespace DiscordNETBot
                     await originalResponse.DeleteAsync();
                 }
             }
+        }
+
+        private async Task HandlePollModal(SocketModal modal, string[] parts)
+        {
+            try
+            {
+                if (parts.Length < 5)
+                {
+                    await modal.RespondAsync("Invalid poll modal data.", ephemeral: true);
+                    return;
+                }
+
+                var optionCount = int.Parse(parts[1]);
+                var duration = uint.Parse(parts[2]);
+                var multiSelect = bool.Parse(parts[3]);
+                var question = Uri.UnescapeDataString(parts[4]);
+
+                List<PollMediaProperties> options = [];
+
+                for (var i = 1; i <= optionCount; i++)
+                {
+                    SocketMessageComponentData? comp = modal.Data.Components.FirstOrDefault(c => c.CustomId == $"option_{i}");
+                    if (comp != null && !string.IsNullOrWhiteSpace(comp.Value))
+                    {
+                        options.Add(new PollMediaProperties { Text = comp.Value });
+                    }
+                }
+
+                PollProperties poll = new()
+                {
+                    Question = new() { Text = question },
+                    Duration = duration,
+                    Answers = options,
+                    AllowMultiselect = multiSelect,
+                    LayoutType = PollLayout.Default
+                };
+
+                if (modal.Channel is ITextChannel textChannel)
+                {
+                    IUserMessage? pollMessage = await textChannel.SendMessageAsync(poll: poll);
+
+                    if (pollMessage is not null)
+                    {
+                        await modal.RespondAsync(
+                            $"Poll created successfully! [Jump to poll]({pollMessage.GetJumpUrl()})",
+                            ephemeral: true
+                        );
+                    }
+                }
+                else
+                {
+                    await modal.RespondAsync("Unable to send poll in this channel.", ephemeral: true);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error handling poll modal");
+                await modal.RespondAsync("An error occurred while creating the poll.", ephemeral: true);
+            }
+
         }
 
         private async Task OnMessageReceived(SocketMessage message)
